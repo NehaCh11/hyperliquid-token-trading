@@ -8,5 +8,25 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@nktkas/hyperliquid": "^0.16.0",
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "axios": "^1.12.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "ethers": "^6.15.0",
+    "express": "^5.1.0",
+    "hardhat": "^2.22.0",
+    "lucide-react": "^0.544.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "viem": "^2.37.11"
+  },
+  "devDependencies": {
+    "@openzeppelin/contracts": "^5.4.0",
+    "chai": "^4.5.0",
+    "sinon": "^21.0.0",
+    "ws": "^8.18.3"
+  }
 }

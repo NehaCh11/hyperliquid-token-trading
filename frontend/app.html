@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOKEN Trading</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/viem@2/dist/viem.umd.js"></script>
+    <style>
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card { backdrop-filter: blur(10px); background: rgba(31, 41, 55, 0.8); }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .animate-fade { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .glow { box-shadow: 0 0 20px rgba(102, 126, 234, 0.3); }
+    </style>
+</head>
+<body class="min-h-screen gradient-bg p-6">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-8 animate-fade">
+            <h1 class="text-5xl font-bold text-white mb-2">TOKEN Trading</h1>
+            <p class="text-purple-200">Secure DEX on Hyperliquid</p>
+        </div>
+
+        <!-- Connect -->
+        <div id="connectSection" class="flex justify-center animate-fade">
+            <div class="card rounded-2xl p-8 max-w-md w-full glow">
+                <div class="bg-yellow-900 bg-opacity-30 border border-yellow-500 rounded-lg p-4 mb-6">
+                    <p class="text-sm text-yellow-100">🔒 Your keys never leave MetaMask</p>
+                </div>
+                <button id="connectBtn" class="w-full btn-primary text-white font-bold py-4 rounded-xl hover:opacity-90 transition">
+                    Connect MetaMask
+                </button>
+            </div>
+        </div>
+
+        <!-- Main -->
+        <div id="mainApp" class="hidden animate-fade">
+            <div class="card rounded-2xl p-4 mb-6 glow">
+                <p class="text-sm text-purple-300">Connected</p>
+                <p id="address" class="font-mono text-sm text-white"></p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Balances -->
+                <div class="card rounded-2xl p-6 glow">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-white">Balances</h3>
+                        <button id="refreshBtn" class="text-purple-300 hover:text-white text-sm">↻</button>
+                    </div>
+                    <div id="balances" class="text-sm space-y-2"></div>
+                </div>
+
+                <!-- Orderbook -->
+                <div class="card rounded-2xl p-6 glow">
+                    <h3 class="text-xl font-bold text-white mb-4">Order Book</h3>
+                    <div class="text-xs space-y-3">
+                        <div>
+                            <p class="text-red-400 font-semibold mb-2">ASKS</p>
+                            <div id="asks" class="space-y-1"></div>
+                        </div>
+                        <div class="border-t border-gray-600 pt-3">
+                            <p class="text-green-400 font-semibold mb-2">BIDS</p>
+                            <div id="bids" class="space-y-1"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Place Order -->
+                <div class="card rounded-2xl p-6 glow">
+                    <h3 class="text-xl font-bold text-white mb-4">Place Order</h3>
+                    
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <button id="buyBtn" class="py-3 bg-green-600 rounded-xl text-white font-bold hover:bg-green-700 transition">
+                            BUY
+                        </button>
+                        <button id="sellBtn" class="py-3 bg-gray-700 rounded-xl text-white font-bold hover:bg-gray-600 transition">
+                            SELL
+                        </button>
+                    </div>
+
+                    <input id="price" type="number" step="0.01" placeholder="Price (USDC)" 
+                        class="w-full bg-gray-700 bg-opacity-50 rounded-xl px-4 py-3 text-white mb-3 border border-gray-600 focus:border-purple-500 outline-none">
+                    
+                    <input id="size" type="number" step="0.1" placeholder="Size (TOKEN)" 
+                        class="w-full bg-gray-700 bg-opacity-50 rounded-xl px-4 py-3 text-white mb-4 border border-gray-600 focus:border-purple-500 outline-none">
+
+                    <button id="placeOrderBtn" class="w-full bg-green-600 hover:bg-green-700 py-3 rounded-xl text-white font-bold transition">
+                        Place Order
+                    </button>
+
+                    <div id="status" class="mt-4 text-xs"></div>
+                </div>
+            </div>
+
+            <!-- Orders -->
+            <div class="card rounded-2xl p-6 mt-6 glow">
+                <h3 class="text-xl font-bold text-white mb-4">Open Orders</h3>
+                <div id="orders" class="text-sm"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+    import * as viem from "https://cdn.jsdelivr.net/npm/viem@2/dist/viem.min.js";
+
+    const API = 'http://localhost:3000/api';
+    const HYPERLIQUID_API = 'https://api.hyperliquid-testnet.xyz';
+    
+    let account, walletClient, isBuy = true;
+
+    document.getElementById('connectBtn').addEventListener('click', async () => {
+        if (typeof window.ethereum === 'undefined') {
+            alert('MetaMask not detected. Please refresh the page or restart your browser.');
+            return;
+        }
+
+        console.log('MetaMask detected:', window.ethereum);
+
+        try {
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            account = accounts[0];
+            
+            // Create wallet client
+            walletClient = await viem.createWalletClient({
+                account,
+                chain: {
+                    id: 998,
+                    name: 'HyperEVM Testnet',
+                    network: 'hyperevm-testnet',
+                    rpcUrls: {
+                        default: { http: ['https://api.hyperliquid-testnet.xyz/evm'] }
+                    }
+                },
+                transport: viem.custom(window.ethereum)
+            });
+
+            // Show connected address
+            document.getElementById('address').textContent = account;
+            
+            // Switch to main app
+            document.getElementById('connectSection').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            
+            // Load initial data
+            await loadData();
+            
+        } catch (e) {
+            console.error('Connection error:', e);
+            alert('Connection failed: ' + e.message);
+        }
+    });
+
+    async function loadData() {
+        await loadBalances();
+        await loadOrderbook();
+        await loadOrders();
+    }
+
+    async function loadBalances() {
+        try {
+            const res = await fetch(`${API}/balances`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: account })
+            });
+            const data = await res.json();
+            
+            const div = document.getElementById('balances');
+            if (data.balances?.length > 0) {
+                div.innerHTML = data.balances
+                    .filter(b => parseFloat(b.token.total) > 0)
+                    .map(b => `<div class="flex justify-between py-2 px-3 bg-gray-700 bg-opacity-30 rounded-lg"><span class="text-purple-300">${b.coin}</span><span class="text-white font-semibold">${parseFloat(b.token.total).toFixed(2)}</span></div>`)
+                    .join('');
+            } else {
+                div.innerHTML = '<p class="text-gray-400">No balances</p>';
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function loadOrderbook() {
+        try {
+            const res = await fetch(`${API}/orderbook`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ coin: 'TOKEN' })
+            });
+            const data = await res.json();
+            
+            document.getElementById('asks').innerHTML = data.levels[1].slice(0, 3)
+                .map(a => `<div class="flex justify-between text-red-400 py-1"><span>${a.px}</span><span>${a.sz}</span></div>`)
+                .join('');
+            
+            document.getElementById('bids').innerHTML = data.levels[0].slice(0, 3)
+                .map(b => `<div class="flex justify-between text-green-400 py-1"><span>${b.px}</span><span>${b.sz}</span></div>`)
+                .join('');
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function loadOrders() {
+        try {
+            const res = await fetch(`${API}/open-orders`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: account })
+            });
+            const data = await res.json();
+            
+            const div = document.getElementById('orders');
+            if (data?.length > 0) {
+                div.innerHTML = data.map(o => `
+                    <div class="border-t border-gray-700 pt-3 mt-3 flex justify-between items-center">
+                        <div>
+                            <span class="font-semibold ${o.side === 'B' ? 'text-green-400' : 'text-red-400'}">${o.side === 'B' ? 'BUY' : 'SELL'}</span>
+                            <span class="text-xs text-gray-400 ml-3">${o.sz} @ ${o.limitPx}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                div.innerHTML = '<p class="text-gray-400">No open orders</p>';
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    document.getElementById('buyBtn').addEventListener('click', () => {
+        isBuy = true;
+        document.getElementById('buyBtn').classList.replace('bg-gray-700', 'bg-green-600');
+        document.getElementById('sellBtn').classList.replace('bg-red-600', 'bg-gray-700');
+    });
+
+    document.getElementById('sellBtn').addEventListener('click', () => {
+        isBuy = false;
+        document.getElementById('sellBtn').classList.replace('bg-gray-700', 'bg-red-600');
+        document.getElementById('buyBtn').classList.replace('bg-green-600', 'bg-gray-700');
+    });
+
+    document.getElementById('placeOrderBtn').addEventListener('click', async () => {
+        const price = document.getElementById('price').value;
+        const size = document.getElementById('size').value;
+        const status = document.getElementById('status');
+
+        if (!price || !size) return status.innerHTML = '<p class="text-red-400">Enter price and size</p>';
+
+        try {
+            status.innerHTML = '<p class="text-yellow-400">Signing in MetaMask...</p>';
+
+            const domain = { name: 'Exchange', version: '1', chainId: 998, verifyingContract: '0x0000000000000000000000000000000000000000' };
+            const types = { Agent: [{ name: 'source', type: 'string' }, { name: 'connectionId', type: 'bytes32' }] };
+            const message = { source: 'a', connectionId: viem.keccak256(viem.toHex('hyperliquid')).slice(0, 42) };
+
+            const signature = await walletClient.signTypedData({ account, domain, types, primaryType: 'Agent', message });
+
+            const action = { type: 'order', orders: [{ a: 10000, b: isBuy, p: price, s: size, r: false, t: { limit: { tif: 'Gtc' } } }], grouping: 'na' };
+
+            const response = await fetch(`${HYPERLIQUID_API}/exchange`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, signature, nonce: Date.now() })
+            });
+
+            const result = await response.json();
+            status.innerHTML = result.status === 'ok' 
+                ? '<p class="text-green-400">Order placed!</p>' 
+                : `<p class="text-red-400">Error: ${JSON.stringify(result)}</p>`;
+            
+            if (result.status === 'ok') setTimeout(loadData, 2000);
+        } catch (e) {
+            status.innerHTML = `<p class="text-red-400">${e.message}</p>`;
+        }
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', loadData);
+    setInterval(loadOrderbook, 10000);
+</script>
+
+</body>
+</html>
